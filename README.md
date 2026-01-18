@@ -2,6 +2,8 @@
 
 A terminal UI for managing multiple Git repositories with integrated Claude Code support. Work on several projects simultaneously, each with its own Claude Code session, git worktrees, and persistent conversation history.
 
+![Multicode Screenshot](assets/app.png)
+
 ## Features
 
 - **Multi-Project Tabs** - Open multiple repositories as tabs, switch instantly with `1-9` keys
