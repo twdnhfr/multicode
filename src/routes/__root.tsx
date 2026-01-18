@@ -19,9 +19,10 @@ import {
   type SyncStatus,
 } from "../components/WorktreeManager";
 import { loadConfig, updateConfig } from "../config";
+import { fileViewerState } from "../fileViewerState";
 import type { Worktree } from "../config";
 import { join } from "path";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { homedir } from "os";
 import { otlpReceiver, type OTLPData } from "../components/OTLPReceiver";
@@ -582,11 +583,37 @@ function RootLayout() {
     if (selectedFile) {
       setNavigateToPath(selectedFile);
       setFocusArea("tree");
+      // Wenn es eine Datei ist (kein Ordner), direkt öffnen
+      try {
+        const stat = statSync(selectedFile);
+        if (stat.isFile()) {
+          openFileViewer(selectedFile);
+        }
+      } catch {
+        // Ignore stat errors
+      }
     }
   }
 
-  // Prüfe ob wir auf der Home-Route sind (nicht auf Setup)
-  const isOnHomeRoute = !currentPath || currentPath === "/" || !currentPath.startsWith("/setup");
+  function openFileViewer(filePath: string) {
+    router.navigate({ to: "/file", search: { path: filePath } });
+  }
+
+  function isOptionBackspaceKey(key: { name?: string; alt?: boolean; meta?: boolean; sequence?: string }): boolean {
+    if (key.name !== "backspace") return false;
+    if (key.alt || key.meta) return true;
+    return !!key.sequence && key.sequence.startsWith("\u001b");
+  }
+
+  function isOptionDeleteKey(key: { name?: string; alt?: boolean; meta?: boolean; sequence?: string }): boolean {
+    if (key.name !== "delete") return false;
+    if (key.alt || key.meta) return true;
+    return !!key.sequence && key.sequence.startsWith("\u001b[3;");
+  }
+
+  // Prüfe ob wir auf der Home-Route sind (Home oder File, nicht Setup)
+  const isOnFileRoute = currentPath?.startsWith("/file");
+  const isOnHomeRoute = !currentPath || currentPath === "/" || currentPath.startsWith("/file") || !currentPath.startsWith("/setup");
 
   useKeyboard((key) => {
     // === GLOBALE HOTKEYS (funktionieren IMMER, auch bei offenem Terminal) ===
@@ -607,8 +634,8 @@ function RootLayout() {
       }
     }
 
-    // Tab zum Fokus-Wechsel zwischen Ebenen (nur ohne Shift)
-    if (key.name === "tab" && !key.shift && !isDialogOpen && isOnHomeRoute) {
+    // Tab zum Fokus-Wechsel zwischen Ebenen (nur ohne Shift, nicht auf File-Route)
+    if (key.name === "tab" && !key.shift && !isDialogOpen && isOnHomeRoute && !isOnFileRoute) {
       setFocusArea((prev) => {
         if (isTerminalOpen) {
           // Mit Terminal: projectTabs → worktreeTabs → tree → terminal → projectTabs
@@ -628,10 +655,114 @@ function RootLayout() {
       return;
     }
 
-    // Wenn Terminal fokussiert ist, Keys ans Terminal weiterleiten
-    if (focusArea === "terminal" && isTerminalOpen && activeTab && isOnHomeRoute) {
+    // Wenn Terminal fokussiert ist, Keys ans Terminal weiterleiten (nicht auf File-Route)
+    if (focusArea === "terminal" && isTerminalOpen && activeTab && isOnHomeRoute && !isOnFileRoute) {
       const terminalHandle = terminalRefs.current.get(activeTab.id);
       terminalHandle?.sendKey(key);
+      return;
+    }
+
+    // File-Route: Keyboard handling für File Viewer (vim-style)
+    if (isOnFileRoute) {
+      const mode = fileViewerState.getMode();
+      const searchActive = fileViewerState.isSearchActive();
+      const jumpActive = fileViewerState.isJumpActive();
+
+      if (jumpActive) {
+        if (key.name === "escape") {
+          fileViewerState.exitJumpMode();
+        } else if (key.name === "backspace") {
+          fileViewerState.deleteJumpChar();
+        } else if (key.name === "return") {
+          fileViewerState.confirmJump();
+        } else if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
+          fileViewerState.appendJumpChar(key.sequence);
+        }
+        return;
+      }
+
+      if (searchActive) {
+        if (key.name === "escape") {
+          fileViewerState.exitSearchMode();
+        } else if (key.name === "backspace") {
+          fileViewerState.deleteSearchChar();
+        } else if (key.name === "up" || key.name === "k") {
+          fileViewerState.prevMatch();
+        } else if (key.name === "down" || key.name === "j") {
+          fileViewerState.nextMatch();
+        } else if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
+          fileViewerState.appendSearchChar(key.sequence);
+        }
+        return;
+      }
+
+      if (mode === "insert") {
+        // Insert mode
+        if (key.name === "escape") {
+          fileViewerState.enterNormalMode();
+        } else if (isOptionBackspaceKey(key) || (key.name === "backspace" && key.shift)) {
+          fileViewerState.deleteWordBefore();
+        } else if (isOptionDeleteKey(key) || (key.name === "delete" && key.shift)) {
+          fileViewerState.deleteWordAt();
+        } else if (key.name === "backspace") {
+          fileViewerState.deleteCharBefore();
+        } else if (key.name === "delete") {
+          fileViewerState.deleteCharAt();
+        } else if (key.name === "return") {
+          fileViewerState.insertNewline();
+        } else if (key.name === "left") {
+          fileViewerState.cursorLeft();
+        } else if (key.name === "right") {
+          fileViewerState.cursorRight();
+        } else if (key.name === "up") {
+          fileViewerState.cursorUp();
+        } else if (key.name === "down") {
+          fileViewerState.cursorDown();
+        } else if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
+          // Regular character input
+          fileViewerState.insertChar(key.sequence);
+        }
+      } else {
+        // Normal mode
+        if (key.name === "q" || key.name === "escape") {
+          router.navigate({ to: "/" });
+        } else if (key.name === "i") {
+          fileViewerState.enterInsertMode();
+        } else if (key.name === "a") {
+          fileViewerState.cursorRight();
+          fileViewerState.enterInsertMode();
+        } else if (key.name === "h" || key.name === "left") {
+          fileViewerState.cursorLeft();
+        } else if (key.name === "j" || key.name === "down") {
+          fileViewerState.cursorDown();
+        } else if (key.name === "k" || key.name === "up") {
+          fileViewerState.cursorUp();
+        } else if (key.name === "l" || key.name === "right") {
+          fileViewerState.cursorRight();
+        } else if (key.name === "0") {
+          fileViewerState.cursorLineStart();
+        } else if (key.name === "4" && key.shift) {
+          // $ - end of line
+          fileViewerState.cursorLineEnd();
+        } else if (key.name === "g" && !key.shift) {
+          fileViewerState.scrollToTop();
+        } else if (key.name === "g" && key.shift) {
+          fileViewerState.scrollToBottom();
+        } else if (key.name === "pageup" || (key.ctrl && key.name === "u")) {
+          fileViewerState.pageUp();
+        } else if (key.name === "pagedown" || (key.ctrl && key.name === "d")) {
+          fileViewerState.pageDown();
+        } else if (key.name === "n") {
+          fileViewerState.enterJumpMode();
+        } else if (key.name === "f") {
+          fileViewerState.enterSearchMode();
+        } else if (key.name === "s") {
+          // Save file
+          if (fileViewerState.save()) {
+            toast("File saved");
+          }
+        }
+      }
       return;
     }
 
@@ -691,8 +822,8 @@ function RootLayout() {
     }
   });
 
-  // Tree grün wenn fokussiert UND auf Home-Route
-  const treeBorderColor = focusArea === "tree" && isOnHomeRoute ? "#22c55e" : undefined;
+  // Tree grün wenn fokussiert UND auf Home-Route (nicht File-Route)
+  const treeBorderColor = focusArea === "tree" && isOnHomeRoute && !isOnFileRoute ? "#22c55e" : undefined;
   const terminalBorderColor = focusArea === "terminal" && isTerminalOpen && isOnHomeRoute ? "#22c55e" : undefined;
 
   // Höhe für FileTree berechnen (Terminal-Höhe minus TabBar, WorktreeBar, ScriptBar, Borders)
@@ -742,26 +873,28 @@ function RootLayout() {
             borderColor={treeBorderColor}
           >
             <FileTree
+              key={activeWorktreePath || activeRepoPath}
               rootPath={activeWorktreePath || activeRepoPath}
               width={30}
               height={treeHeight}
-              isActive={!isDialogOpen && focusArea === "tree" && isOnHomeRoute}
+              isActive={!isDialogOpen && focusArea === "tree" && isOnHomeRoute && !isOnFileRoute}
               showHidden={showHidden}
               navigateToPath={navigateToPath}
               onNavigated={() => setNavigateToPath(null)}
+              onFileOpen={openFileViewer}
             />
           </box>
         )}
 
         {/* Content-Bereich */}
         <box flexGrow={1} flexDirection="column">
-          {/* Platzhalter wenn Terminal offen */}
-          {isTerminalOpen && (
+          {/* Platzhalter wenn Terminal offen (aber nicht auf File-Route) */}
+          {isTerminalOpen && !isOnFileRoute && (
             <box flexGrow={1} />
           )}
 
-          {/* Outlet: normal wenn kein Terminal */}
-          {!isTerminalOpen && <Outlet />}
+          {/* Outlet: normal wenn kein Terminal ODER auf File-Route */}
+          {(!isTerminalOpen || isOnFileRoute) && <Outlet />}
         </box>
       </box>
 
@@ -777,8 +910,8 @@ function RootLayout() {
         />
       )}
 
-      {/* Outlet off-screen wenn Terminal offen - damit State erhalten bleibt */}
-      {isTerminalOpen && isOnHomeRoute && (
+      {/* Outlet off-screen wenn Terminal offen (aber nicht auf File-Route) - damit State erhalten bleibt */}
+      {isTerminalOpen && isOnHomeRoute && !isOnFileRoute && (
         <box position="absolute" top={-9999} left={-9999}>
           <Outlet />
         </box>

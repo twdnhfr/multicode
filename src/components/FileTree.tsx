@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { readdirSync, statSync } from "fs";
@@ -12,6 +12,7 @@ interface FileTreeProps {
   showHidden?: boolean;
   navigateToPath?: string | null;
   onNavigated?: () => void;
+  onFileOpen?: (filePath: string) => void;
 }
 
 interface TreeNode {
@@ -33,30 +34,41 @@ function getVisibleNodes(
     if (depth > maxDepth) return;
 
     try {
-      const entries = readdirSync(dirPath, { withFileTypes: true });
-      const sorted = entries
-        .filter((e) => showHidden || !e.name.startsWith("."))
+      // Don't use withFileTypes - Bun has issues with Dirent objects
+      const names = readdirSync(dirPath);
+      // Folders to always exclude
+      const excludedFolders = [".git", "node_modules", "vendor"];
+      const entries = names
+        .filter((name) => !excludedFolders.includes(name))
+        .filter((name) => showHidden || !name.startsWith("."))
+        .map((name) => {
+          const fullPath = join(dirPath, name);
+          let isDir = false;
+          try {
+            isDir = statSync(fullPath).isDirectory();
+          } catch {
+            // Ignore stat errors
+          }
+          return { name, fullPath, isDir };
+        })
         .sort((a, b) => {
           // Ordner zuerst, dann alphabetisch
-          if (a.isDirectory() && !b.isDirectory()) return -1;
-          if (!a.isDirectory() && b.isDirectory()) return 1;
+          if (a.isDir && !b.isDir) return -1;
+          if (!a.isDir && b.isDir) return 1;
           return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
         });
 
-      for (const entry of sorted) {
-        const fullPath = join(dirPath, entry.name);
-        const isDir = entry.isDirectory();
-
+      for (const entry of entries) {
         nodes.push({
           name: entry.name,
-          path: fullPath,
-          isDirectory: isDir,
+          path: entry.fullPath,
+          isDirectory: entry.isDir,
           depth,
         });
 
         // Rekursiv wenn Ordner expandiert ist
-        if (isDir && expandedPaths.has(fullPath)) {
-          traverse(fullPath, depth + 1);
+        if (entry.isDir && expandedPaths.has(entry.fullPath)) {
+          traverse(entry.fullPath, depth + 1);
         }
       }
     } catch {
@@ -76,14 +88,13 @@ export function FileTree({
   showHidden = true,
   navigateToPath = null,
   onNavigated,
+  onFileOpen,
 }: FileTreeProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const nodes = useMemo(
-    () => getVisibleNodes(rootPath, expandedPaths, showHidden),
-    [rootPath, expandedPaths, showHidden]
-  );
+  // No useMemo - avoid caching issues on tab switch
+  const nodes = getVisibleNodes(rootPath, expandedPaths, showHidden);
 
   // Navigation zu einem bestimmten Pfad (von FileSearch)
   useEffect(() => {
@@ -156,11 +167,15 @@ export function FileTree({
       setSelectedIndex((i) => Math.max(0, i - 1));
     } else if (key.name === "down") {
       setSelectedIndex((i) => Math.min(nodes.length - 1, i + 1));
-    } else if (key.name === "return" || key.name === "right") {
+    } else if (key.name === "return") {
       if (selectedNode?.isDirectory) {
-        if (!expandedPaths.has(selectedNode.path)) {
-          toggleExpand(selectedNode.path);
-        }
+        toggleExpand(selectedNode.path);
+      } else if (selectedNode && onFileOpen) {
+        onFileOpen(selectedNode.path);
+      }
+    } else if (key.name === "right") {
+      if (selectedNode?.isDirectory && !expandedPaths.has(selectedNode.path)) {
+        toggleExpand(selectedNode.path);
       }
     } else if (key.name === "left") {
       if (selectedNode?.isDirectory && expandedPaths.has(selectedNode.path)) {
@@ -180,15 +195,15 @@ export function FileTree({
   const repoName = basename(rootPath);
 
   // Sichtbare Zeilen (scroll window)
-  // height - 3 für Header (Repo-Name + Leerzeile) und Scroll-Indikator
-  const maxVisible = height ? Math.max(5, height - 3) : 50;
+  // height - 4 für Header (Repo-Name + Leerzeile), Scroll-Indikator und Hotkeys
+  const maxVisible = height ? Math.max(5, height - 4) : 50;
   const scrollOffset = Math.max(0, selectedIndex - maxVisible + 5);
   const visibleNodes = nodes.slice(scrollOffset, scrollOffset + maxVisible);
 
   return (
     <box flexDirection="column" width={width}>
       {/* Header */}
-      <text attributes={TextAttributes.BOLD}>📁 {truncate(repoName, width - 3)}</text>
+      <text attributes={TextAttributes.BOLD}>▸ {truncate(repoName, width - 3)}</text>
       <box height={1} />
 
       {/* Tree */}
@@ -197,14 +212,14 @@ export function FileTree({
           const actualIndex = scrollOffset + visibleIdx;
           const isSelected = actualIndex === selectedIndex;
           const indent = "  ".repeat(node.depth);
-          const icon = node.isDirectory ? "📁 " : "   ";
+          const icon = node.isDirectory ? "▸ " : "  ";
           const displayName = truncate(node.name, width - 4 - node.depth * 2);
           return (
             <text
               key={node.path}
-              attributes={isSelected ? TextAttributes.BOLD : undefined}
+              attributes={isSelected ? TextAttributes.INVERSE : undefined}
             >
-              {isSelected ? "▶" : " "}{indent}{icon}{displayName}
+              {indent}{icon}{displayName}
             </text>
           );
         })}
@@ -216,6 +231,14 @@ export function FileTree({
           {selectedIndex + 1}/{nodes.length}
         </text>
       )}
+
+      {/* Spacer */}
+      <box flexGrow={1} />
+
+      {/* Hotkeys */}
+      <text attributes={TextAttributes.DIM}>
+        enter:open h:{showHidden ? "hide" : "show"} f:search
+      </text>
     </box>
   );
 }
