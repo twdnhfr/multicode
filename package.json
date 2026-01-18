@@ -1,0 +1,51 @@
+{
+  "name": "multicode",
+  "version": "0.0.1",
+  "description": "Terminal UI for managing multiple repositories with Claude Code integration",
+  "type": "module",
+  "bin": "./src/index.tsx",
+  "files": [
+    "src",
+    "pty-helper.mjs"
+  ],
+  "scripts": {
+    "generate-routes": "tsr generate",
+    "dev": "tsr generate && bun run --watch src/index.tsx",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsr generate && tsc --noEmit"
+  },
+  "keywords": [
+    "cli",
+    "tui",
+    "terminal",
+    "claude",
+    "git",
+    "worktree"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@tanstack/router-cli": "^1.150.0",
+    "@types/bun": "^1.3.6",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.8",
+    "eslint": "^9.39.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.53.0"
+  },
+  "dependencies": {
+    "@opentui-ui/dialog": "^0.1.2",
+    "@opentui-ui/toast": "^0.0.5",
+    "@opentui/core": "^0.1.72",
+    "@opentui/react": "^0.1.72",
+    "@tanstack/react-router": "^1.150.0",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0",
+    "node-pty": "^0.10.1",
+    "react": "^19.2.3"
+  }
+}
