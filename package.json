@@ -3,14 +3,18 @@
   "version": "0.0.1",
   "description": "Terminal UI for managing multiple repositories with Claude Code integration",
   "type": "module",
-  "bin": "./src/index.tsx",
+  "bin": {
+    "multicode": "src/index.tsx"
+  },
   "files": [
     "src",
-    "pty-helper.mjs"
+    "pty-helper.mjs",
+    "assets"
   ],
   "scripts": {
     "generate-routes": "tsr generate",
     "dev": "tsr generate && bun run --watch src/index.tsx",
+    "start": "bun src/index.tsx",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",
@@ -24,8 +28,15 @@
     "git",
     "worktree"
   ],
-  "author": "",
+  "author": "Tobi",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/twdnhfr/multicode"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@tanstack/router-cli": "^1.150.0",
