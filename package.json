@@ -1,6 +1,6 @@
 {
   "name": "multicode",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Terminal UI for managing multiple repositories with Claude Code integration",
   "type": "module",
   "bin": {

@@ -90,15 +90,15 @@ function FileScreen() {
   const modeIndicator = mode === "insert" ? "-- INSERT --" : "-- NORMAL --";
   const modifiedIndicator = isModified ? "[+]" : "";
   const matchByLine = new Map<number, { positions: number[]; activePositions: number[] }>();
-  for (let i = 0; i < searchMatches.length; i++) {
-    const match = searchMatches[i];
+  searchMatches.forEach((match, index) => {
+    if (!match) return;
     const existing = matchByLine.get(match.line) || { positions: [], activePositions: [] };
     existing.positions.push(...match.positions);
-    if (i === activeMatchIndex) {
+    if (index === activeMatchIndex) {
       existing.activePositions.push(...match.positions);
     }
     matchByLine.set(match.line, existing);
-  }
+  });
 
   return (
     <box
