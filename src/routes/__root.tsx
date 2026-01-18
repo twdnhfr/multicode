@@ -688,9 +688,14 @@ function RootLayout() {
   const terminalBorderColor = focusArea === "terminal" && isTerminalOpen && isOnHomeRoute ? "#22c55e" : undefined;
 
   // Höhe für FileTree berechnen (Terminal-Höhe minus TabBar, WorktreeBar, ScriptBar, Borders)
-  const terminalRows = process.stdout.rows || 40;
+  const stdoutRows = process.stdout.rows || 40;
+  const stdoutCols = process.stdout.columns || 120;
   const hasWorktreeBar = activeTab && activeTab.worktrees.length > 0;
-  const treeHeight = terminalRows - (tabs.length > 0 ? 2 : 0) - (hasWorktreeBar ? 2 : 0) - 3; // TabBar + WorktreeBar + ScriptBar + Borders
+  const treeHeight = stdoutRows - (tabs.length > 0 ? 2 : 0) - (hasWorktreeBar ? 2 : 0) - 3; // TabBar + WorktreeBar + ScriptBar + Borders
+  // Terminal-Breite: Gesamtbreite - FileTree(30) - Borders(4) - Margins(2)
+  const terminalWidth = stdoutCols - 30 - 4 - 2;
+  // Terminal-Höhe: gleich wie treeHeight (beide Container haben eigene Borders)
+  const terminalHeight = treeHeight;
 
   return (
     <box flexGrow={1} flexDirection="column">
@@ -742,9 +747,9 @@ function RootLayout() {
 
         {/* Content-Bereich */}
         <box flexGrow={1} flexDirection="column">
-          {/* Terminal-Bereich mit grünem Rahmen (wenn Terminal offen) */}
+          {/* Platzhalter wenn Terminal offen */}
           {isTerminalOpen && (
-            <box flexGrow={1} borderStyle="single" borderColor={terminalBorderColor} />
+            <box flexGrow={1} />
           )}
 
           {/* Outlet: normal wenn kein Terminal */}
@@ -784,10 +789,14 @@ function RootLayout() {
           <box
             key={tab.id}
             position="absolute"
-            top={isActiveTab ? terminalTop : -9999}
+            top={isActiveTab ? terminalTop + 1 : -9999}
             left={isActiveTab ? 33 : -9999}
-            right={2}
-            bottom={4}
+            right={1}
+            bottom={1}
+            overflow="hidden"
+            borderStyle="single"
+            border={true}
+            borderColor={isActiveTab ? terminalBorderColor : undefined}
           >
             <Terminal
               ref={(handle) => {
@@ -800,6 +809,8 @@ function RootLayout() {
               cwd={tab.worktrees.find((wt) => wt.id === tab.activeWorktreeId)?.path || tab.path}
               command={config?.claudePath || "claude"}
               args={tab.sessionId ? [tab.isNewSession ? "--session-id" : "--resume", tab.sessionId] : []}
+              cols={terminalWidth}
+              rows={terminalHeight}
               onExit={() => {
                 // Check if session was updated by pty-helper fallback
                 const sessionUpdatePath = join(homedir(), ".multicode", "session-update.json");

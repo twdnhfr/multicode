@@ -16,14 +16,16 @@ interface TerminalProps {
   command: string;
   args?: string[];
   onExit?: () => void;
+  cols?: number;
+  rows?: number;
 }
 
 export interface TerminalHandle {
   sendKey: (key: { name: string; sequence?: string; ctrl?: boolean; meta?: boolean }) => void;
 }
 
-const COLS = 120;
-const ROWS = 30;
+const DEFAULT_COLS = 90;
+const DEFAULT_ROWS = 20;
 
 // 16-color palette als RGBA
 const COLOR_PALETTE_16 = [
@@ -94,11 +96,11 @@ function xtermColorToRGBA(color: number, mode: number): RGBA | undefined {
 let colorLogged = false;
 
 // Extrahiert den xterm Buffer als StyledText
-function extractStyledText(term: XTerm): StyledText {
+function extractStyledText(term: XTerm, cols: number, rows: number): StyledText {
   const buffer = term.buffer.active;
   const chunks: TextChunk[] = [];
 
-  for (let y = 0; y < ROWS; y++) {
+  for (let y = 0; y < rows; y++) {
     const line = buffer.getLine(y);
     if (!line) continue;
 
@@ -107,7 +109,7 @@ function extractStyledText(term: XTerm): StyledText {
     let currentBg: RGBA | undefined;
     let currentAttrs = 0;
 
-    for (let x = 0; x < COLS; x++) {
+    for (let x = 0; x < cols; x++) {
       const cell = line.getCell(x);
       if (!cell) continue;
 
@@ -173,7 +175,7 @@ function extractStyledText(term: XTerm): StyledText {
     }
 
     // Add newline (except for last line)
-    if (y < ROWS - 1) {
+    if (y < rows - 1) {
       chunks.push({
         __isChunk: true,
         text: "\n",
@@ -195,10 +197,12 @@ function extractStyledText(term: XTerm): StyledText {
 }
 
 export const Terminal = forwardRef(function Terminal(
-  { cwd, command, args = [], onExit }: TerminalProps,
+  { cwd, command, args = [], onExit, cols = DEFAULT_COLS, rows = DEFAULT_ROWS }: TerminalProps,
   ref: ForwardedRef<TerminalHandle>
 ) {
   const [content, setContent] = useState<StyledText | string>(`Starting ${command}...`);
+  const termCols = cols;
+  const termRows = rows;
   const processRef = useRef<ChildProcess | null>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const onExitRef = useRef(onExit);
@@ -259,8 +263,8 @@ export const Terminal = forwardRef(function Terminal(
     startedRef.current = true;
 
     const term = new XTerm({
-      cols: COLS,
-      rows: ROWS,
+      cols: termCols,
+      rows: termRows,
       allowProposedApi: true,
     });
     xtermRef.current = term;
@@ -270,7 +274,11 @@ export const Terminal = forwardRef(function Terminal(
 
     const proc = spawn("node", [helperPath, cwd, command, ...args], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: process.env,
+      env: {
+        ...process.env,
+        TERM_COLS: String(termCols),
+        TERM_ROWS: String(termRows),
+      },
     });
 
     processRef.current = proc;
@@ -280,7 +288,7 @@ export const Terminal = forwardRef(function Terminal(
     const updateDisplay = () => {
       debugLog("updateDisplay called");
       try {
-        const styledText = extractStyledText(term);
+        const styledText = extractStyledText(term, termCols, termRows);
         debugLog(`Total chunks: ${styledText.chunks.length}`);
 
         // Debug: Vergleiche unsere Chunks mit OpenTUI's
@@ -305,7 +313,7 @@ export const Terminal = forwardRef(function Terminal(
         // Fallback to plain text
         const buffer = term.buffer.active;
         const lines: string[] = [];
-        for (let y = 0; y < ROWS; y++) {
+        for (let y = 0; y < termRows; y++) {
           const line = buffer.getLine(y);
           if (line) {
             lines.push(line.translateToString(true));

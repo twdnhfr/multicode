@@ -90,7 +90,16 @@ export function RepoFinder({ resolve, dismiss, dialogId, repoDirectory }: RepoFi
     }
   }, dialogId);
 
-  const visibleFolders = filteredFolders.slice(0, 10);
+  // Scrolling window - zeige 10 Items um die Selektion herum
+  const maxVisible = 10;
+  let scrollOffset = 0;
+  if (filteredFolders.length > maxVisible) {
+    const idealOffset = selectedIndex - Math.floor(maxVisible / 2);
+    const maxOffset = filteredFolders.length - maxVisible;
+    scrollOffset = Math.max(0, Math.min(idealOffset, maxOffset));
+  }
+
+  const visibleFolders = filteredFolders.slice(scrollOffset, scrollOffset + maxVisible);
 
   return (
     <box flexDirection="column" width={50}>
@@ -111,14 +120,18 @@ export function RepoFinder({ resolve, dismiss, dialogId, repoDirectory }: RepoFi
         {visibleFolders.length === 0 ? (
           <text attributes={TextAttributes.DIM}>No matches</text>
         ) : (
-          visibleFolders.map((folder, index) => (
-            <text
-              key={folder}
-              attributes={selectedIndex === index ? TextAttributes.INVERSE | TextAttributes.BOLD : undefined}
-            >
-              {selectedIndex === index ? "▶ " : "  "}{folder}
-            </text>
-          ))
+          visibleFolders.map((folder, index) => {
+            const actualIndex = scrollOffset + index;
+            const isSelected = selectedIndex === actualIndex;
+            return (
+              <text
+                key={folder}
+                attributes={isSelected ? TextAttributes.INVERSE | TextAttributes.BOLD : undefined}
+              >
+                {isSelected ? "▶ " : "  "}{folder}
+              </text>
+            );
+          })
         )}
       </box>
 

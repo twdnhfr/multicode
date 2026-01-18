@@ -11,6 +11,10 @@ const cwd = args[0] || process.cwd();
 const command = args[1] || 'zsh';
 const cmdArgs = args.slice(2);
 
+// Terminal size from environment variables or defaults
+const COLS = parseInt(process.env.TERM_COLS) || 90;
+const ROWS = parseInt(process.env.TERM_ROWS) || 20;
+
 // Check if this is a --resume command that might need fallback to --session-id
 const resumeIndex = cmdArgs.indexOf('--resume');
 const sessionIdIndex = cmdArgs.indexOf('--session-id');
@@ -29,8 +33,8 @@ const sessionUpdateFile = join(sessionUpdateDir, 'session-update.json');
 function startPty(cmdArgsToUse, currentSessionId) {
   ptyProcess = pty.spawn(command, cmdArgsToUse, {
     name: 'xterm-256color',
-    cols: 120,
-    rows: 30,
+    cols: COLS,
+    rows: ROWS,
     cwd,
     env: process.env,
   });
