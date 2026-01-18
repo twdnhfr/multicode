@@ -15,16 +15,28 @@ A terminal UI for managing multiple Git repositories with integrated Claude Code
 
 ## Installation
 
+### Quick Start (Recommended)
+
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/multicode.git
+bunx multicode
+```
+
+That's it! Requires [Bun](https://bun.sh) to be installed.
+
+### Install Globally
+
+```bash
+bun install -g multicode
+multicode
+```
+
+### From Source
+
+```bash
+git clone https://github.com/twdnhfr/multicode.git
 cd multicode
-
-# Install dependencies
 bun install
-
-# Run
-bun dev
+bun run dev
 ```
 
 ## First Run
@@ -134,6 +146,17 @@ Config file: `~/.multicoderc`
   "activeTabIndex": 0
 }
 ```
+
+## Contributing
+
+This project is open source and we'd love your help! Whether it's:
+
+- 🐛 Reporting bugs
+- 💡 Suggesting new features
+- 🔧 Submitting pull requests
+- 📖 Improving documentation
+
+Feel free to [open an issue](https://github.com/twdnhfr/multicode/issues) or submit a PR. All contributions are welcome!
 
 ## License
 
