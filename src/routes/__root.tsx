@@ -161,15 +161,23 @@ function RootLayout() {
   const activeWorktreePath = activeWorktree?.path ?? activeRepoPath;
 
   // Tabs in Config speichern wenn sie sich ändern
+  // Wichtig: Nicht speichern wenn tabs leer ist und es vorher Tabs gab (verhindert versehentliches Löschen)
+  const initialTabCountRef = useRef<number | null>(null);
   useEffect(() => {
-    const openTabs = tabs.map((t) => ({
-      name: t.name,
-      path: t.path,
-      worktrees: t.worktrees,
-      activeWorktreeId: t.activeWorktreeId,
-      sessionId: t.sessionId, // Persist Claude session ID
-    }));
-    updateConfig({ openTabs, activeTabIndex });
+    if (initialTabCountRef.current === null) {
+      initialTabCountRef.current = tabs.length;
+    }
+    // Nur speichern wenn wir Tabs haben ODER wenn wir bewusst alle geschlossen haben (nicht beim ersten leeren Render)
+    if (tabs.length > 0 || initialTabCountRef.current === 0) {
+      const openTabs = tabs.map((t) => ({
+        name: t.name,
+        path: t.path,
+        worktrees: t.worktrees,
+        activeWorktreeId: t.activeWorktreeId,
+        sessionId: t.sessionId, // Persist Claude session ID
+      }));
+      updateConfig({ openTabs, activeTabIndex });
+    }
   }, [tabs, activeTabIndex]);
 
   // Sync-Status für Worktrees periodisch aktualisieren
@@ -769,9 +777,16 @@ function RootLayout() {
         />
       )}
 
-      {/* Outlet off-screen wenn Terminal offen - damit Setup etc. weiterhin mounted sind */}
-      {isTerminalOpen && (
+      {/* Outlet off-screen wenn Terminal offen - damit State erhalten bleibt */}
+      {isTerminalOpen && isOnHomeRoute && (
         <box position="absolute" top={-9999} left={-9999}>
+          <Outlet />
+        </box>
+      )}
+
+      {/* Setup-Overlay wenn nicht auf Home-Route */}
+      {!isOnHomeRoute && (
+        <box position="absolute" top={0} left={0} right={0} bottom={0}>
           <Outlet />
         </box>
       )}

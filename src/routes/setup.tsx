@@ -3,7 +3,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { TextAttributes, StyledText } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { toast } from "@opentui-ui/toast/react";
-import { saveConfig, loadConfig, detectClaudePath } from "../config";
+import { updateConfig, loadConfig, detectClaudePath } from "../config";
 import { readdirSync } from "fs";
 import { homedir } from "os";
 import { join, dirname, basename } from "path";
@@ -87,7 +87,7 @@ function Setup() {
   }, [repoPath]);
 
   function saveAndExit() {
-    saveConfig({
+    updateConfig({
       repoDirectory: selectedRepoPath,
       claudePath: claudePath || detectedClaudePath || "claude",
       worktreeBasePath: worktreePath,
@@ -146,7 +146,8 @@ function Setup() {
         setRepoPath(parent);
       }
     }
-    if (key.name === "right" || key.name === "return") {
+    if (key.name === "right") {
+      // Ordner öffnen
       if (selectedIndex === -1) {
         const parent = dirname(repoPath);
         if (parent !== repoPath) {
@@ -156,9 +157,20 @@ function Setup() {
         setRepoPath(join(repoPath, folders[selectedIndex]));
       }
     }
+    if (key.name === "return") {
+      // Aktuellen Ordner als Repository-Pfad speichern (ohne Dialog zu schließen)
+      updateConfig({ repoDirectory: selectedRepoPath });
+      toast.success(`Repository path set: ${selectedRepoPath}`);
+    }
   }
 
   function handleClaudeKeyboard(key: { name: string; sequence?: string; ctrl?: boolean }) {
+    if (key.name === "return") {
+      // Claude-Pfad speichern (ohne Dialog zu schließen)
+      updateConfig({ claudePath: claudePath || detectedClaudePath || "claude" });
+      toast.success(`Claude path set: ${claudePath}`);
+      return;
+    }
     if (key.name === "left") {
       setCursorPos((p) => Math.max(0, p - 1));
       return;
@@ -178,15 +190,6 @@ function Setup() {
       setClaudePath((p) => p.slice(0, cursorPos) + p.slice(cursorPos + 1));
       return;
     }
-    // Home/End
-    if (key.ctrl && key.name === "a") {
-      setCursorPos(0);
-      return;
-    }
-    if (key.ctrl && key.name === "e") {
-      setCursorPos(claudePath.length);
-      return;
-    }
     // Normale Zeichen
     if (key.sequence && key.sequence.length === 1 && !key.ctrl) {
       setClaudePath((p) => p.slice(0, cursorPos) + key.sequence + p.slice(cursorPos));
@@ -195,6 +198,12 @@ function Setup() {
   }
 
   function handleWorktreeKeyboard(key: { name: string; sequence?: string; ctrl?: boolean }) {
+    if (key.name === "return") {
+      // Worktree-Pfad speichern (ohne Dialog zu schließen)
+      updateConfig({ worktreeBasePath: worktreePath });
+      toast.success(`Worktree path set: ${worktreePath}`);
+      return;
+    }
     if (key.name === "left") {
       setWorktreeCursorPos((p) => Math.max(0, p - 1));
       return;
@@ -212,14 +221,6 @@ function Setup() {
     }
     if (key.name === "delete") {
       setWorktreePath((p) => p.slice(0, worktreeCursorPos) + p.slice(worktreeCursorPos + 1));
-      return;
-    }
-    if (key.ctrl && key.name === "a") {
-      setWorktreeCursorPos(0);
-      return;
-    }
-    if (key.ctrl && key.name === "e") {
-      setWorktreeCursorPos(worktreePath.length);
       return;
     }
     if (key.sequence && key.sequence.length === 1 && !key.ctrl) {
@@ -322,7 +323,7 @@ function Setup() {
             <text attributes={TextAttributes.BOLD}>Selected: {selectedRepoPath}</text>
             <box height={1} />
             <text attributes={TextAttributes.DIM}>
-              ↑↓: Navigate | ←: Back | →/Enter: Open
+              ↑↓: Navigate | ←: Back | →: Open | Enter: Select
             </text>
           </box>
         ) : activeTab === "claude" ? (
@@ -351,10 +352,7 @@ function Setup() {
 
             <box height={1} />
             <text attributes={TextAttributes.DIM}>
-              Enter the path to Claude Code
-            </text>
-            <text attributes={TextAttributes.DIM}>
-              ←→: Cursor | Ctrl+A: Start | Ctrl+E: End
+              ←→: Cursor | Enter: Save
             </text>
           </box>
         ) : (
@@ -381,10 +379,7 @@ function Setup() {
 
             <box height={1} />
             <text attributes={TextAttributes.DIM}>
-              Example: ~/worktrees or /Users/tobi/gits_worktrees
-            </text>
-            <text attributes={TextAttributes.DIM}>
-              ←→: Cursor | Ctrl+A: Start | Ctrl+E: End
+              ←→: Cursor | Enter: Save
             </text>
           </box>
         )}
