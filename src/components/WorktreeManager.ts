@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { existsSync, readdirSync, mkdirSync } from "fs";
+import { existsSync, readdirSync, mkdirSync, copyFileSync } from "fs";
 import { join, basename } from "path";
 import type { Worktree } from "../config";
 
@@ -90,6 +90,12 @@ export function createWorktree(
     cwd: repoPath,
     encoding: "utf-8",
   });
+
+  const exampleEnvPath = join(worktreePath, ".env.example");
+  const envPath = join(worktreePath, ".env");
+  if (existsSync(exampleEnvPath) && !existsSync(envPath)) {
+    copyFileSync(exampleEnvPath, envPath);
+  }
 }
 
 /**

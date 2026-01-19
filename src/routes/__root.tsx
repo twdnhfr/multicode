@@ -12,6 +12,7 @@ import { ScriptBar, type ScriptStatus } from "../components/ScriptBar";
 import { WorktreeBar } from "../components/WorktreeBar";
 import { WorktreeDialog } from "../components/WorktreeDialog";
 import { CloseWorktreeDialog } from "../components/CloseWorktreeDialog";
+import { ArtisanDialog, type ArtisanAction } from "../components/ArtisanDialog";
 import {
   listWorktrees,
   getSyncStatus,
@@ -26,6 +27,7 @@ import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { homedir } from "os";
 import { otlpReceiver, type OTLPData } from "../components/OTLPReceiver";
+import { homeState } from "../homeState";
 
 // Erkennt den Package Manager und prüft ob Scripts existieren
 function getProjectScriptInfo(repoPath: string): {
@@ -160,6 +162,11 @@ function RootLayout() {
     (wt) => wt.id === activeTab.activeWorktreeId
   );
   const activeWorktreePath = activeWorktree?.path ?? activeRepoPath;
+  const hasArtisan = !!activeWorktreePath && existsSync(join(activeWorktreePath, "artisan"));
+
+  useEffect(() => {
+    homeState.setActiveProject(activeTab?.name ?? null, activeWorktreePath ?? null);
+  }, [activeTab?.name, activeWorktreePath]);
 
   // Tabs in Config speichern wenn sie sich ändern
   // Wichtig: Nicht speichern wenn tabs leer ist und es vorher Tabs gab (verhindert versehentliches Löschen)
@@ -599,6 +606,48 @@ function RootLayout() {
     router.navigate({ to: "/file", search: { path: filePath } });
   }
 
+  async function openArtisanDialog() {
+    if (!activeWorktreePath || !hasArtisan) {
+      toast.error("No artisan file found");
+      return;
+    }
+
+    const result = await dialog.prompt<ArtisanAction | null>({
+      content: (ctx) => (
+        <ArtisanDialog
+          onSelect={(action) => ctx.resolve(action)}
+          onCancel={() => ctx.resolve(null)}
+        />
+      ),
+      size: "small",
+    });
+
+    if (!result) return;
+
+    const args = result.split(" ");
+    const proc = spawn("php", ["artisan", ...args], {
+      cwd: activeWorktreePath,
+      stdio: "ignore",
+      detached: false,
+    });
+
+    toast(`Running: php artisan ${args.join(" ")}`);
+
+    proc.on("exit", (code) => {
+      if (code === 0) {
+        toast.success("Migration finished");
+      } else {
+        toast.error("Migration failed", {
+          description: `Exit code: ${code}`,
+        });
+      }
+    });
+
+    proc.on("error", () => {
+      toast.error("Migration failed");
+    });
+  }
+
   function isOptionBackspaceKey(key: { name?: string; alt?: boolean; meta?: boolean; sequence?: string }): boolean {
     if (key.name !== "backspace") return false;
     if (key.alt || key.meta) return true;
@@ -812,6 +861,10 @@ function RootLayout() {
     if (key.name === "h") {
       toggleHiddenFiles();
     }
+    // Laravel migrations
+    if (key.name === "m") {
+      openArtisanDialog();
+    }
     // Worktree Dialog mit 'w'
     if (key.name === "w") {
       openWorktreeDialog();
@@ -907,6 +960,7 @@ function RootLayout() {
           otlpRunning={otlpRunning}
           otlpPort={otlpReceiver.getPort()}
           otlpData={otlpData}
+          hasArtisan={hasArtisan}
         />
       )}
 

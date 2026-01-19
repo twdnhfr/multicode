@@ -20,6 +20,7 @@ interface ScriptBarProps {
   otlpRunning?: boolean;
   otlpPort?: number;
   otlpData?: OTLPData | null;
+  hasArtisan?: boolean;
 }
 
 interface PackageJson {
@@ -36,6 +37,7 @@ export function ScriptBar({
   otlpRunning = false,
   otlpPort = 4319,
   otlpData = null,
+  hasArtisan = false,
 }: ScriptBarProps) {
   const [scripts, setScripts] = useState<string[]>([]);
 
@@ -150,6 +152,15 @@ export function ScriptBar({
           />
         );
       })}
+
+      {/* Laravel */}
+      {hasArtisan && (
+        <>
+          {scripts.length > 0 && <text attributes={TextAttributes.DIM}>|</text>}
+          <text attributes={TextAttributes.DIM}>Laravel:</text>
+          <text attributes={TextAttributes.DIM}>[m] migrate</text>
+        </>
+      )}
     </box>
   );
 }
