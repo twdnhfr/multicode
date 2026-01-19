@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "re
 import type { ForwardedRef } from "react";
 import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { join } from "path";
-import { appendFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
 import { Terminal as XTerm } from "@xterm/headless";
 
 // Read clipboard content (macOS: pbpaste, Linux: xclip)
@@ -19,6 +20,56 @@ function getClipboardContent(): string {
     // Clipboard access failed
   }
   return "";
+}
+
+// Check if clipboard contains an image and save it to temp file
+// Returns the file path if successful, null otherwise
+function getClipboardImage(): string | null {
+  const isMac = process.platform === "darwin";
+
+  if (isMac) {
+    try {
+      // Create temp directory for clipboard images
+      const tempDir = join(tmpdir(), "multicode-clipboard");
+      if (!existsSync(tempDir)) {
+        mkdirSync(tempDir, { recursive: true });
+      }
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const tempFile = join(tempDir, `clipboard-${timestamp}.png`);
+
+      // Use osascript to save clipboard image to file (like OpenCode does)
+      const script = `
+        set imageData to the clipboard as «class PNGf»
+        set fileRef to open for access POSIX file "${tempFile}" with write permission
+        set eof fileRef to 0
+        write imageData to fileRef
+        close access fileRef
+      `;
+
+      const result = spawnSync("osascript", ["-e", script], {
+        timeout: 5000,
+        encoding: "utf-8"
+      });
+
+      // Check if file was created and has content
+      if (result.status === 0 && existsSync(tempFile)) {
+        const stats = Bun.file(tempFile);
+        if (stats.size > 0) {
+          return tempFile;
+        }
+        // Clean up empty file
+        unlinkSync(tempFile);
+      }
+    } catch {
+      // Image clipboard access failed - this is normal if clipboard has text
+    }
+  }
+
+  // TODO: Add Linux support (wl-paste -t image/png, xclip -selection clipboard -t image/png -o)
+
+  return null;
 }
 import { StyledText, type TextChunk, createTextAttributes, RGBA, red } from "@opentui/core";
 
@@ -266,9 +317,18 @@ export const Terminal = forwardRef(function Terminal(
         processRef.current.stdin.write("\x1b");
         return;
       }
-      // Handle paste: Shift+V (works reliably across terminals)
-      // Cmd+V doesn't work because terminals either intercept it or send √
-      if (key.shift && key.name === "v") {
+      // Handle paste: Shift+V or √ (Cmd+V which macOS converts to √)
+      // First check for image in clipboard, then fall back to text
+      const isPasteShortcut = (key.shift && key.name === "v") || key.name === "√";
+      if (isPasteShortcut) {
+        // Try to get image from clipboard first
+        const imagePath = getClipboardImage();
+        if (imagePath) {
+          // Send image path to Claude Code - it will read the file
+          processRef.current.stdin.write(imagePath);
+          return;
+        }
+        // Fall back to text paste
         const clipboardContent = getClipboardContent();
         if (clipboardContent) {
           processRef.current.stdin.write(clipboardContent);
