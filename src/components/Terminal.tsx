@@ -1,9 +1,25 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import type { ForwardedRef } from "react";
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { join } from "path";
 import { appendFileSync } from "fs";
 import { Terminal as XTerm } from "@xterm/headless";
+
+// Read clipboard content (macOS: pbpaste, Linux: xclip)
+function getClipboardContent(): string {
+  try {
+    const isMac = process.platform === "darwin";
+    const result = isMac
+      ? spawnSync("pbpaste", [])
+      : spawnSync("xclip", ["-selection", "clipboard", "-o"]);
+    if (result.status === 0) {
+      return result.stdout.toString();
+    }
+  } catch {
+    // Clipboard access failed
+  }
+  return "";
+}
 import { StyledText, type TextChunk, createTextAttributes, RGBA, red } from "@opentui/core";
 
 const LOG_FILE = "/tmp/multicode-debug.log";
@@ -21,7 +37,7 @@ interface TerminalProps {
 }
 
 export interface TerminalHandle {
-  sendKey: (key: { name: string; sequence?: string; ctrl?: boolean; meta?: boolean }) => void;
+  sendKey: (key: { name: string; sequence?: string; ctrl?: boolean; meta?: boolean; shift?: boolean }) => void;
 }
 
 const DEFAULT_COLS = 90;
@@ -248,6 +264,15 @@ export const Terminal = forwardRef(function Terminal(
       }
       if (key.name === "escape") {
         processRef.current.stdin.write("\x1b");
+        return;
+      }
+      // Handle paste: Shift+V (works reliably across terminals)
+      // Cmd+V doesn't work because terminals either intercept it or send √
+      if (key.shift && key.name === "v") {
+        const clipboardContent = getClipboardContent();
+        if (clipboardContent) {
+          processRef.current.stdin.write(clipboardContent);
+        }
         return;
       }
       if (key.sequence && !key.ctrl && !key.meta) {
